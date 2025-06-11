@@ -1,0 +1,42 @@
+name: Backend CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy backend files to EC2 via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: 'backend/'
+          target: '~/deploy/coloredcow-hiring-dashboard/backend'
+
+      - name: SSH to EC2 and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/deploy/coloredcow-hiring-dashboard/backend
+            composer install --no-interaction --prefer-dist --optimize-autoloader
+            cp .env.production .env
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan storage:link
+            # Restart queue/workers if needed, e.g.:
+            # sudo systemctl restart supervisor
